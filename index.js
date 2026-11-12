@@ -82,25 +82,28 @@ rl.on('close', () => {
         process.exit(1);
     }
 
-    console.log(`\nCriando a estrutura do projeto "${projectName}"...`);
+    console.log(`\nCriando a estrutura do projeto "${projectName}" na pasta 2_Semestre...`);
 
     fs.mkdirSync(targetDir, { recursive: true });
     process.chdir(targetDir);
 
-    console.log('Instalando dependências (isso pode levar alguns segundos)...');
+    console.log('Inicializando o projeto e instalando as dependências (express, cors, mysql2)...');
     try {
-        execSync('npm init -y', { stdio: 'ignore' });
-        execSync('npm install express dotenv cors mysql2', { stdio: 'ignore' });
-        execSync('npm install --save-dev nodemon', { stdio: 'ignore' });
+        execSync('npm init -y', { shell: true, stdio: 'ignore' });
+        execSync('npm install express cors mysql2', { shell: true, stdio: 'inherit' });
     } catch (error) {
-        console.log('Erro ao instalar dependências.');
-        process.exit(1);
+        console.log('\n[AVISO] Erro ao instalar dependências automaticamente.');
+        console.log('Tente rodar "npm install" manualmente dentro da pasta do projeto.');
     }
 
+    // Atualiza o package.json com o autor e o script dev (node --watch)
     const packageJsonPath = path.join(targetDir, 'package.json');
     if (fs.existsSync(packageJsonPath)) {
         const packageData = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
         packageData.author = 'LeandroImenes';
+        packageData.scripts = {
+            "dev": "node --watch server.js"
+        };
         fs.writeFileSync(packageJsonPath, JSON.stringify(packageData, null, 2));
     }
 
@@ -110,8 +113,12 @@ rl.on('close', () => {
 
     fs.writeFileSync(path.join('db', 'script.sql'), sqlInput.trim() + '\n');
 
-    const dbName = tables.length > 0 ? tables[0].name : 'gestao_residuos';
-    const dbContent = `const mysql = require('mysql')
+    // Extrai o nome do banco de dados diretamente do SQL, ou usa o nome do projeto como plano B[cite: 1]
+    const dbNameMatch = sqlInput.match(/CREATE\s+DATABASE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?([a-zA-Z0-9_]+)[`"]?/i);
+    const dbName = dbNameMatch ? dbNameMatch[1] : projectName;
+    console.log(`🗄️ Banco de dados identificado: ${dbName}`);
+
+    const dbContent = `const mysql = require('mysql2')
 
 const connection = mysql.createConnection({
     host: 'localhost',
@@ -125,6 +132,20 @@ module.exports = connection
 
     let routesImports = '';
     let routesEndpoints = '';
+
+    let insomniaResources = [];
+    const workspaceId = `wrk_${projectName}_${Date.now()}`;
+
+    insomniaResources.push({
+        _id: workspaceId,
+        parentId: null,
+        modified: Date.now(),
+        created: Date.now(),
+        name: `Projeto ${projectName}`,
+        description: "Coleção gerada automaticamente pelo BACKTRON-5000",
+        scope: "collection",
+        _type: "workspace"
+    });
 
     tables.forEach(table => {
         const tableName = table.name;
@@ -245,7 +266,122 @@ router.post('/${tableName}', ${singularName}Controller.cadastrar)
 router.put('/${tableName}/:id', ${singularName}Controller.alterar)
 router.delete('/${tableName}/:id', ${singularName}Controller.excluir)
 `;
+
+        const folderId = `fld_${tableName}_${Date.now()}`;
+        insomniaResources.push({
+            _id: folderId,
+            parentId: workspaceId,
+            modified: Date.now(),
+            created: Date.now(),
+            name: tableName.toUpperCase(),
+            description: `Requisições da tabela ${tableName}`,
+            environment: {},
+            environmentPropertyOrder: null,
+            metaSortKey: -Date.now(),
+            _type: 'request_group'
+        });
+
+        const sampleBodyObj = {};
+        activeColumns.forEach(col => {
+            sampleBodyObj[col] = `valor_${col}`;
+        });
+
+        insomniaResources.push({
+            _id: `req_list_${tableName}_${Date.now()}`,
+            parentId: folderId,
+            modified: Date.now(),
+            created: Date.now(),
+            url: `http://localhost:3000/${tableName}`,
+            name: `Listar ${tableName}`,
+            method: "GET",
+            body: {},
+            parameters: [],
+            headers: [],
+            authentication: {},
+            metaSortKey: -100,
+            _type: "request"
+        });
+
+        insomniaResources.push({
+            _id: `req_getid_${tableName}_${Date.now()}`,
+            parentId: folderId,
+            modified: Date.now(),
+            created: Date.now(),
+            url: `http://localhost:3000/${tableName}/1`,
+            name: `Buscar ${singularName} por ID`,
+            method: "GET",
+            body: {},
+            parameters: [],
+            headers: [],
+            authentication: {},
+            metaSortKey: -90,
+            _type: "request"
+        });
+
+        insomniaResources.push({
+            _id: `req_post_${tableName}_${Date.now()}`,
+            parentId: folderId,
+            modified: Date.now(),
+            created: Date.now(),
+            url: `http://localhost:3000/${tableName}`,
+            name: `Cadastrar ${singularName}`,
+            method: "POST",
+            body: {
+                mimeType: "application/json",
+                text: JSON.stringify(sampleBodyObj, null, 2)
+            },
+            parameters: [],
+            headers: [{ name: "Content-Type", value: "application/json" }],
+            authentication: {},
+            metaSortKey: -80,
+            _type: "request"
+        });
+
+        insomniaResources.push({
+            _id: `req_put_${tableName}_${Date.now()}`,
+            parentId: folderId,
+            modified: Date.now(),
+            created: Date.now(),
+            url: `http://localhost:3000/${tableName}/1`,
+            name: `Alterar ${singularName}`,
+            method: "PUT",
+            body: {
+                mimeType: "application/json",
+                text: JSON.stringify(sampleBodyObj, null, 2)
+            },
+            parameters: [],
+            headers: [{ name: "Content-Type", value: "application/json" }],
+            authentication: {},
+            metaSortKey: -70,
+            _type: "request"
+        });
+
+        insomniaResources.push({
+            _id: `req_del_${tableName}_${Date.now()}`,
+            parentId: folderId,
+            modified: Date.now(),
+            created: Date.now(),
+            url: `http://localhost:3000/${tableName}/1`,
+            name: `Excluir ${singularName}`,
+            method: "DELETE",
+            body: {},
+            parameters: [],
+            headers: [],
+            authentication: {},
+            metaSortKey: -60,
+            _type: "request"
+        });
     });
+
+    const insomniaExport = {
+        _type: "export",
+        __export_format: 4,
+        __export_date: new Date().toISOString(),
+        __export_source: "BACKTRON-5000",
+        resources: insomniaResources
+    };
+
+    fs.writeFileSync('insomnia.json', JSON.stringify(insomniaExport, null, 2));
 
     const routesContent = `const express = require("express")
 const router = express.Router()
@@ -284,6 +420,6 @@ package-lock.json
 `;
     fs.writeFileSync('.gitignore', gitignoreContent);
 
-    console.log(`\nProjeto "${projectName}" criado com sucesso!`);
+    console.log(`\nProjeto "${projectName}" criado com sucesso! Banco de dados extraído e configurado automaticamente.`);
     rl.close();
 });
