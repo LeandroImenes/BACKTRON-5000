@@ -28,7 +28,7 @@ rl.on('close', () => {
         process.exit(1);
     }
 
-    // 1. Extrai todas as tabelas e colunas do código SQL completo usando Regex
+    // 1. Extrai todas as tabelas e colunas do SQL
     const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?([a-zA-Z0-9_]+)[`"]?\s*\(([\s\S]*?)\);/gi;
     let match;
     const tables = [];
@@ -74,9 +74,8 @@ rl.on('close', () => {
         });
     }
 
-    // Pega o nome do projeto passado pelo arquivo .bat
     const projectName = process.argv[2] || 'projeto';
-    const targetDir = path.join(process.cwd(), projectName);
+    const targetDir = path.join('C:\\Users\\Leandro\\Desktop\\SENAI\\2_Semestre', projectName);
 
     if (fs.existsSync(targetDir)) {
         console.log('Já existe uma pasta com esse nome!');
@@ -85,11 +84,9 @@ rl.on('close', () => {
 
     console.log(`\nCriando a estrutura do projeto "${projectName}"...`);
 
-    // 2. Cria a pasta do projeto principal e entra nela
     fs.mkdirSync(targetDir, { recursive: true });
     process.chdir(targetDir);
 
-    // 3. Inicializa o npm e instala dependências
     console.log('Instalando dependências (isso pode levar alguns segundos)...');
     try {
         execSync('npm init -y', { stdio: 'ignore' });
@@ -100,7 +97,6 @@ rl.on('close', () => {
         process.exit(1);
     }
 
-    // 4. Atualiza o package.json com o autor
     const packageJsonPath = path.join(targetDir, 'package.json');
     if (fs.existsSync(packageJsonPath)) {
         const packageData = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
@@ -108,15 +104,12 @@ rl.on('close', () => {
         fs.writeFileSync(packageJsonPath, JSON.stringify(packageData, null, 2));
     }
 
-    // 5. Cria as subpastas
     fs.mkdirSync(path.join(targetDir, 'db'), { recursive: true });
     fs.mkdirSync(path.join(targetDir, 'docs'), { recursive: true });
     fs.mkdirSync(path.join(targetDir, 'src', 'controllers'), { recursive: true });
 
-    // 6. Salva o código SQL COMPLETO dentro de db/script.sql
     fs.writeFileSync(path.join('db', 'script.sql'), sqlInput.trim() + '\n');
 
-    // 7. Cria src/db.js
     const dbName = tables.length > 0 ? tables[0].name : 'gestao_residuos';
     const dbContent = `const mysql = require('mysql')
 
@@ -130,7 +123,6 @@ module.exports = connection
 `;
     fs.writeFileSync(path.join('src', 'db.js'), dbContent);
 
-    // 8. Gera os Controllers e rotas para CADA tabela encontrada no SQL
     let routesImports = '';
     let routesEndpoints = '';
 
@@ -172,6 +164,23 @@ const listar = (req, res) => {
             res.status(500).json({ error: 'Erro ao buscar ${tableName}' })
         } else {
             res.json(results)
+        }
+    })
+}
+
+const buscarPorId = (req, res) => {
+    const id = Number(req.params.id)
+    const sql = 'SELECT * FROM ${tableName} WHERE id = ?;'
+    con.query(sql, [id], (err, results) => {
+        if (err) {
+            console.error(err)
+            res.status(500).json({ error: 'Erro ao buscar ${singularName}' })
+        } else {
+            if (results.length === 0) {
+                res.status(404).json({ message: '${singularName} não encontrado(a)' })
+            } else {
+                res.json(results[0])
+            }
         }
     })
 }
@@ -220,6 +229,7 @@ const excluir = (req, res) => {
 module.exports = {
     cadastrar,
     listar,
+    buscarPorId,
     alterar,
     excluir
 }
@@ -230,13 +240,13 @@ module.exports = {
         routesEndpoints += `
 // Rotas para ${tableName}
 router.get('/${tableName}', ${singularName}Controller.listar)
+router.get('/${tableName}/:id', ${singularName}Controller.buscarPorId)
 router.post('/${tableName}', ${singularName}Controller.cadastrar)
 router.put('/${tableName}/:id', ${singularName}Controller.alterar)
 router.delete('/${tableName}/:id', ${singularName}Controller.excluir)
 `;
     });
 
-    // 9. Cria src/routes.js
     const routesContent = `const express = require("express")
 const router = express.Router()
 
@@ -251,7 +261,6 @@ module.exports = router
 `;
     fs.writeFileSync(path.join('src', 'routes.js'), routesContent);
 
-    // 10. Cria server.js na raiz
     const serverContent = `const express = require("express")
 const cors = require("cors")
 
@@ -270,11 +279,11 @@ app.listen(porta, () => {
 `;
     fs.writeFileSync('server.js', serverContent);
 
-    // 11. Cria .gitignore
     const gitignoreContent = `node_modules
 package-lock.json
 `;
     fs.writeFileSync('.gitignore', gitignoreContent);
 
-    console.log(`\nProjeto "${projectName}" criado com sucesso! Arquivo script.sql salvo por completo, controllers e rotas gerados. 🚀`);
+    console.log(`\nProjeto "${projectName}" criado com sucesso!`);
+    rl.close();
 });
